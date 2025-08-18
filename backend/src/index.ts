@@ -13,6 +13,7 @@ import {
 } from './types/socket';
 import { Session } from './types/index';
 import authRoutes from './routes/auth';
+import codeSnippetRoutes from './routes/codeSnippet';
 
 // Load environment variables
 dotenv.config();
@@ -45,6 +46,7 @@ app.use(cookieParser());
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/code-snippets', codeSnippetRoutes);
 
 // Basic health check route
 app.get('/health', (req, res) => {
