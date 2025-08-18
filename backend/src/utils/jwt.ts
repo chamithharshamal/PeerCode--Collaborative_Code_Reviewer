@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 
 export interface JWTPayload {
+  id: string;
   userId: string;
   email: string;
   username: string;

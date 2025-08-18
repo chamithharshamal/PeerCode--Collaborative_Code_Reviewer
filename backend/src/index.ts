@@ -14,6 +14,9 @@ import {
 import { Session } from './types/index';
 import authRoutes from './routes/auth';
 import codeSnippetRoutes from './routes/codeSnippet';
+import sessionRoutes from './routes/session';
+import { initializeDatabase, closeConnections } from './config/database';
+import { SessionCleanupService } from './services/SessionCleanupService';
 
 // Load environment variables
 dotenv.config();
@@ -47,6 +50,7 @@ app.use(cookieParser());
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/code-snippets', codeSnippetRoutes);
+app.use('/api/sessions', sessionRoutes);
 
 // Basic health check route
 app.get('/health', (req, res) => {
@@ -108,8 +112,41 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start server
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+// Initialize database and start cleanup service
+const sessionCleanupService = new SessionCleanupService();
+
+const startServer = async () => {
+  try {
+    // Initialize database connections
+    await initializeDatabase();
+    
+    // Start session cleanup service
+    sessionCleanupService.start();
+    
+    // Start server
+    server.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  sessionCleanupService.stop();
+  await closeConnections();
+  process.exit(0);
 });
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully');
+  sessionCleanupService.stop();
+  await closeConnections();
+  process.exit(0);
+});
+
+startServer();
