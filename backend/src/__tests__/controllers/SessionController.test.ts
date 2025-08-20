@@ -27,7 +27,7 @@ describe('SessionController', () => {
     controller = new SessionController(mockSessionService);
 
     mockRequest = {
-      user: { id: 'user-123', userId: 'user-123', username: 'testuser', email: 'test@example.com' },
+      user: { userId: 'user-123', username: 'testuser', email: 'test@example.com' },
       body: {},
       params: {},
     };

@@ -1,7 +1,10 @@
 import Redis from 'ioredis';
-import { Session, SessionState } from '../models/Session';
+import { Session, SessionState as SessionModelState } from '../models/Session';
 import { SessionRepository } from '../repositories/SessionRepository';
 import { redis } from '../config/database';
+import { AnnotationService } from './AnnotationService';
+import { UserService } from './UserService';
+import { SessionState, Annotation, User } from '../types';
 
 export interface SessionUpdate {
   participants?: string[];
@@ -11,13 +14,22 @@ export interface SessionUpdate {
 export class SessionService {
   private redis: Redis;
   private sessionRepository: SessionRepository;
+  private annotationService: AnnotationService;
+  private userService: UserService;
   private readonly SESSION_PREFIX = 'session:';
   private readonly USER_SESSIONS_PREFIX = 'user_sessions:';
   private readonly SESSION_TIMEOUT = 3600; // 1 hour in seconds
 
-  constructor(redisClient: Redis = redis, sessionRepo: SessionRepository = new SessionRepository()) {
+  constructor(
+    redisClient: Redis = redis, 
+    sessionRepo: SessionRepository = new SessionRepository(),
+    annotationService: AnnotationService = new AnnotationService(),
+    userService: UserService = new UserService()
+  ) {
     this.redis = redisClient;
     this.sessionRepository = sessionRepo;
+    this.annotationService = annotationService;
+    this.userService = userService;
   }
 
   async createSession(userId: string, codeSnippetId: string, maxParticipants: number = 10): Promise<Session> {
@@ -141,6 +153,80 @@ export class SessionService {
     }
   }
 
+  async getSessionState(sessionId: string): Promise<SessionState | null> {
+    try {
+      const session = await this.getSession(sessionId);
+      if (!session) {
+        return null;
+      }
+
+      // Get active participants with user details
+      const activeParticipants: User[] = [];
+      for (const participant of session.getActiveParticipants()) {
+        const user = await this.userService.getUserById(participant.userId);
+        if (user) {
+          activeParticipants.push(user);
+        }
+      }
+
+      // Get current annotations
+      const currentAnnotations = await this.annotationService.getSessionAnnotations(sessionId);
+
+      return {
+        session: {
+          id: session.id,
+          creatorId: session.creatorId,
+          codeSnippet: { id: session.codeSnippetId } as any, // Will be populated by calling service
+          participants: session.participants.map(p => p.userId),
+          annotations: currentAnnotations,
+          aiSuggestions: [], // Will be populated by AI service
+          debateHistory: [], // Will be populated by debate service
+          status: session.status,
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+        },
+        activeParticipants,
+        currentAnnotations,
+        aiSuggestions: [],
+        debateMode: false,
+      };
+    } catch (error) {
+      console.error('Error getting session state:', error);
+      return null;
+    }
+  }
+
+  async addAnnotation(sessionId: string, annotation: Omit<Annotation, 'id' | 'createdAt'>): Promise<Annotation> {
+    try {
+      // Update session activity
+      await this.updateSessionActivity(sessionId);
+      
+      // Add annotation through annotation service
+      return await this.annotationService.addAnnotation(sessionId, annotation);
+    } catch (error) {
+      console.error('Error adding annotation to session:', error);
+      throw error;
+    }
+  }
+
+  async removeAnnotation(sessionId: string, annotationId: string): Promise<boolean> {
+    try {
+      return await this.annotationService.removeAnnotation(sessionId, annotationId);
+    } catch (error) {
+      console.error('Error removing annotation from session:', error);
+      return false;
+    }
+  }
+
+  async updateAnnotation(sessionId: string, annotationId: string, updates: Partial<Annotation>): Promise<Annotation | null> {
+    try {
+      return await this.annotationService.updateAnnotation(sessionId, annotationId, updates);
+    } catch (error) {
+      console.error('Error updating annotation in session:', error);
+      return null;
+    }
+  }
+
   async cleanupExpiredSessions(timeoutMinutes: number = 60): Promise<number> {
     try {
       const expiredSessionIds = await this.sessionRepository.findExpiredSessions(timeoutMinutes);
@@ -161,6 +247,9 @@ export class SessionService {
             for (const participant of session.participants) {
               await this.removeUserSession(participant.userId, sessionId);
             }
+            
+            // Clear session annotations
+            await this.annotationService.clearSessionAnnotations(sessionId);
             
             cleanedCount++;
           }
@@ -188,7 +277,7 @@ export class SessionService {
     const cached = await this.redis.get(key);
     
     if (cached) {
-      const sessionData: SessionState = JSON.parse(cached);
+      const sessionData: SessionModelState = JSON.parse(cached);
       return Session.fromJSON(sessionData);
     }
     

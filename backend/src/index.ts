@@ -17,6 +17,10 @@ import codeSnippetRoutes from './routes/codeSnippet';
 import sessionRoutes from './routes/session';
 import { initializeDatabase, closeConnections } from './config/database';
 import { SessionCleanupService } from './services/SessionCleanupService';
+import { WebSocketService } from './services/WebSocketService';
+import { SessionService } from './services/SessionService';
+import { UserService } from './services/UserService';
+import { AnnotationService } from './services/AnnotationService';
 
 // Load environment variables
 dotenv.config();
@@ -57,63 +61,14 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Socket.io connection handling
-io.on('connection', (socket) => {
-  console.log(`User connected: ${socket.id}`);
-
-  socket.on('join-session', (data) => {
-    console.log(`User ${data.userId} joining session ${data.sessionId}`);
-    socket.data.userId = data.userId;
-    socket.data.sessionId = data.sessionId;
-    socket.join(data.sessionId);
-
-    // TODO: Implement session joining logic
-    socket.emit('session-joined', {
-      participants: [],
-      sessionState: {
-        session: {} as Session,
-        activeParticipants: [],
-        currentAnnotations: [],
-        aiSuggestions: [],
-        debateMode: false,
-      },
-    });
-  });
-
-  socket.on('add-annotation', (data) => {
-    console.log(`Annotation added in session ${data.sessionId}`);
-    // TODO: Implement annotation logic
-    socket.to(data.sessionId).emit('annotation-added', {
-      annotation: data.annotation,
-      userId: socket.data.userId!,
-    });
-  });
-
-  socket.on('highlight-code', (data) => {
-    console.log(`Code highlighted in session ${data.sessionId}`);
-    socket.to(data.sessionId).emit('code-highlighted', {
-      range: data.range,
-      userId: socket.data.userId!,
-    });
-  });
-
-  socket.on('typing-indicator', (data) => {
-    socket.to(data.sessionId).emit('typing-indicator', {
-      userId: socket.data.userId!,
-      isTyping: data.isTyping,
-    });
-  });
-
-  socket.on('disconnect', () => {
-    console.log(`User disconnected: ${socket.id}`);
-    if (socket.data.sessionId) {
-      socket.leave(socket.data.sessionId);
-    }
-  });
-});
-
-// Initialize database and start cleanup service
+// Initialize services
+const sessionService = new SessionService();
+const userService = new UserService();
+const annotationService = new AnnotationService();
 const sessionCleanupService = new SessionCleanupService();
+
+// Initialize WebSocket service
+const webSocketService = new WebSocketService(io, sessionService, userService, annotationService);
 
 const startServer = async () => {
   try {

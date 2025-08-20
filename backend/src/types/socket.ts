@@ -24,6 +24,8 @@ export interface ClientToServerEvents {
 // Server to Client Events
 export interface ServerToClientEvents {
   'session-joined': (data: { participants: User[]; sessionState: SessionState }) => void;
+  'user-joined': (data: { user: User; participants: User[] }) => void;
+  'user-left': (data: { userId: string; participants: User[] }) => void;
   'annotation-added': (data: { annotation: Annotation; userId: string }) => void;
   'code-highlighted': (data: { range: CodeRange; userId: string }) => void;
   'typing-indicator': (data: { userId: string; isTyping: boolean }) => void;

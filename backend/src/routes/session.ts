@@ -1,6 +1,6 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { SessionController } from '../controllers/SessionController';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 const sessionController = new SessionController();
@@ -9,21 +9,21 @@ const sessionController = new SessionController();
 router.use(authenticateToken);
 
 // Create a new session
-router.post('/', sessionController.createSession);
+router.post('/', (req: Request, res: Response) => sessionController.createSession(req as AuthenticatedRequest, res));
 
 // Join an existing session
-router.post('/:sessionId/join', sessionController.joinSession);
+router.post('/:sessionId/join', (req: Request, res: Response) => sessionController.joinSession(req as AuthenticatedRequest, res));
 
 // Leave a session
-router.post('/:sessionId/leave', sessionController.leaveSession);
+router.post('/:sessionId/leave', (req: Request, res: Response) => sessionController.leaveSession(req as AuthenticatedRequest, res));
 
 // Get session details
-router.get('/:sessionId', sessionController.getSession);
+router.get('/:sessionId', (req: Request, res: Response) => sessionController.getSession(req as AuthenticatedRequest, res));
 
 // Get user's sessions
-router.get('/user/sessions', sessionController.getUserSessions);
+router.get('/user/sessions', (req: Request, res: Response) => sessionController.getUserSessions(req as AuthenticatedRequest, res));
 
 // Update session activity (heartbeat)
-router.post('/:sessionId/activity', sessionController.updateSessionActivity);
+router.post('/:sessionId/activity', (req: Request, res: Response) => sessionController.updateSessionActivity(req as AuthenticatedRequest, res));
 
 export default router;

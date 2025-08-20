@@ -9,10 +9,10 @@ export class SessionController {
     this.sessionService = sessionService;
   }
 
-  createSession = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  async createSession(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { codeSnippetId, maxParticipants = 10 } = req.body;
-      const userId = req.user!.id;
+      const userId = req.user!.userId;
 
       if (!codeSnippetId) {
         res.status(400).json({ error: 'Code snippet ID is required' });
@@ -38,12 +38,12 @@ export class SessionController {
         error: error instanceof Error ? error.message : 'Failed to create session' 
       });
     }
-  };
+  }
 
-  joinSession = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  async joinSession(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { sessionId } = req.params;
-      const userId = req.user!.id;
+      const userId = req.user!.userId;
 
       if (!sessionId) {
         res.status(400).json({ error: 'Session ID is required' });
@@ -78,12 +78,12 @@ export class SessionController {
 
       res.status(500).json({ error: 'Failed to join session' });
     }
-  };
+  }
 
-  leaveSession = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  async leaveSession(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { sessionId } = req.params;
-      const userId = req.user!.id;
+      const userId = req.user!.userId;
 
       if (!sessionId) {
         res.status(400).json({ error: 'Session ID is required' });
@@ -100,9 +100,9 @@ export class SessionController {
       console.error('Error leaving session:', error);
       res.status(500).json({ error: 'Failed to leave session' });
     }
-  };
+  }
 
-  getSession = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  async getSession(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { sessionId } = req.params;
 
@@ -128,11 +128,11 @@ export class SessionController {
       console.error('Error getting session:', error);
       res.status(500).json({ error: 'Failed to get session' });
     }
-  };
+  }
 
-  getUserSessions = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  async getUserSessions(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const userId = req.user!.id;
+      const userId = req.user!.userId;
       const sessions = await this.sessionService.getUserSessions(userId);
 
       res.json({
@@ -145,9 +145,9 @@ export class SessionController {
       console.error('Error getting user sessions:', error);
       res.status(500).json({ error: 'Failed to get user sessions' });
     }
-  };
+  }
 
-  updateSessionActivity = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  async updateSessionActivity(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const { sessionId } = req.params;
 
@@ -166,5 +166,5 @@ export class SessionController {
       console.error('Error updating session activity:', error);
       res.status(500).json({ error: 'Failed to update session activity' });
     }
-  };
+  }
 }
