@@ -48,6 +48,14 @@
 
 - [ ] 6. Build collaborative code annotation system
 
+
+
+
+
+
+
+
+
   - Create annotation data models and database schema
   - Implement annotation CRUD API endpoints
   - Build interactive code annotation UI components

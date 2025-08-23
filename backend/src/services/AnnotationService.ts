@@ -1,127 +1,205 @@
+import { Pool } from 'pg';
 import Redis from 'ioredis';
-import { Annotation } from '../types';
-import { redis } from '../config/database';
-import { v4 as uuidv4 } from 'uuid';
+import { Annotation, AnnotationData } from '../models/Annotation';
+import { AnnotationRepository } from '../repositories/AnnotationRepository';
+import { pool, redis } from '../config/database';
+
+export interface CreateAnnotationRequest {
+  userId: string;
+  sessionId: string;
+  lineStart: number;
+  lineEnd: number;
+  columnStart: number;
+  columnEnd: number;
+  content: string;
+  type: 'comment' | 'suggestion' | 'question';
+}
+
+export interface UpdateAnnotationRequest {
+  content?: string;
+  type?: 'comment' | 'suggestion' | 'question';
+  lineStart?: number;
+  lineEnd?: number;
+  columnStart?: number;
+  columnEnd?: number;
+}
 
 export class AnnotationService {
+  private repository: AnnotationRepository;
   private redis: Redis;
-  private readonly ANNOTATIONS_PREFIX = 'session_annotations:';
-  private readonly ANNOTATION_TIMEOUT = 3600; // 1 hour in seconds
+  private readonly CACHE_PREFIX = 'annotations:session:';
+  private readonly CACHE_TTL = 3600; // 1 hour
 
-  constructor(redisClient: Redis = redis) {
+  constructor(dbPool: Pool = pool, redisClient: Redis = redis) {
+    this.repository = new AnnotationRepository(dbPool);
     this.redis = redisClient;
   }
 
-  async addAnnotation(sessionId: string, annotation: Omit<Annotation, 'id' | 'createdAt'>): Promise<Annotation> {
-    const newAnnotation: Annotation = {
-      ...annotation,
-      id: uuidv4(),
-      createdAt: new Date(),
-    };
-
-    try {
-      const key = `${this.ANNOTATIONS_PREFIX}${sessionId}`;
-      
-      // Store annotation in Redis as a hash field
-      await this.redis.hset(key, newAnnotation.id, JSON.stringify(newAnnotation));
-      await this.redis.expire(key, this.ANNOTATION_TIMEOUT);
-
-      return newAnnotation;
-    } catch (error) {
-      console.error('Error adding annotation:', error);
-      throw new Error('Failed to add annotation');
+  async createAnnotation(request: CreateAnnotationRequest): Promise<AnnotationData> {
+    // Validate input
+    if (!request.content.trim()) {
+      throw new Error('Annotation content cannot be empty');
     }
+
+    if (request.lineStart < 0 || request.lineEnd < request.lineStart) {
+      throw new Error('Invalid line range');
+    }
+
+    if (request.columnStart < 0 || request.columnEnd < 0) {
+      throw new Error('Invalid column range');
+    }
+
+    // Create annotation
+    const annotation = new Annotation(
+      request.userId,
+      request.sessionId,
+      request.lineStart,
+      request.lineEnd,
+      request.columnStart,
+      request.columnEnd,
+      request.content,
+      request.type
+    );
+
+    // Validate annotation
+    if (!annotation.isValid()) {
+      throw new Error('Invalid annotation data');
+    }
+
+    // Save to database
+    const savedAnnotation = await this.repository.create(annotation);
+
+    // Invalidate cache
+    await this.invalidateSessionCache(request.sessionId);
+
+    return savedAnnotation;
   }
 
-  async getSessionAnnotations(sessionId: string): Promise<Annotation[]> {
+  async getAnnotation(id: string): Promise<AnnotationData | null> {
+    return await this.repository.findById(id);
+  }
+
+  async getSessionAnnotations(sessionId: string): Promise<AnnotationData[]> {
+    // Try cache first
+    const cacheKey = `${this.CACHE_PREFIX}${sessionId}`;
     try {
-      const key = `${this.ANNOTATIONS_PREFIX}${sessionId}`;
-      const annotationsHash = await this.redis.hgetall(key);
-      
-      const annotations: Annotation[] = [];
-      for (const annotationJson of Object.values(annotationsHash)) {
-        try {
-          const annotation = JSON.parse(annotationJson);
-          // Convert date strings back to Date objects
-          annotation.createdAt = new Date(annotation.createdAt);
-          annotations.push(annotation);
-        } catch (parseError) {
-          console.error('Error parsing annotation:', parseError);
-        }
+      const cached = await this.redis.get(cacheKey);
+      if (cached) {
+        const annotations = JSON.parse(cached);
+        // Convert date strings back to Date objects
+        return annotations.map((ann: any) => ({
+          ...ann,
+          createdAt: new Date(ann.createdAt),
+          updatedAt: new Date(ann.updatedAt)
+        }));
       }
-
-      // Sort by creation time
-      return annotations.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     } catch (error) {
-      console.error('Error getting session annotations:', error);
-      return [];
+      console.warn('Cache read error:', error);
     }
+
+    // Get from database
+    const annotations = await this.repository.findBySessionId(sessionId);
+
+    // Cache the result
+    try {
+      await this.redis.setex(cacheKey, this.CACHE_TTL, JSON.stringify(annotations));
+    } catch (error) {
+      console.warn('Cache write error:', error);
+    }
+
+    return annotations;
   }
 
-  async removeAnnotation(sessionId: string, annotationId: string): Promise<boolean> {
-    try {
-      const key = `${this.ANNOTATIONS_PREFIX}${sessionId}`;
-      const result = await this.redis.hdel(key, annotationId);
-      return result > 0;
-    } catch (error) {
-      console.error('Error removing annotation:', error);
+  async getUserAnnotations(userId: string): Promise<AnnotationData[]> {
+    return await this.repository.findByUserId(userId);
+  }
+
+  async updateAnnotation(id: string, updates: UpdateAnnotationRequest): Promise<AnnotationData> {
+    // Get existing annotation
+    const existing = await this.repository.findById(id);
+    if (!existing) {
+      throw new Error('Annotation not found');
+    }
+
+    // Create updated annotation
+    const annotation = Annotation.fromJSON(existing);
+    
+    if (updates.content !== undefined) {
+      annotation.updateContent(updates.content);
+    }
+    
+    if (updates.type !== undefined) {
+      annotation.type = updates.type;
+      annotation.updatedAt = new Date();
+    }
+
+    if (updates.lineStart !== undefined || updates.lineEnd !== undefined ||
+        updates.columnStart !== undefined || updates.columnEnd !== undefined) {
+      annotation.updatePosition(
+        updates.lineStart ?? annotation.lineStart,
+        updates.lineEnd ?? annotation.lineEnd,
+        updates.columnStart ?? annotation.columnStart,
+        updates.columnEnd ?? annotation.columnEnd
+      );
+    }
+
+    // Validate updated annotation
+    if (!annotation.isValid()) {
+      throw new Error('Invalid annotation data after update');
+    }
+
+    // Save to database
+    const updatedAnnotation = await this.repository.update(annotation);
+
+    // Invalidate cache
+    await this.invalidateSessionCache(existing.sessionId);
+
+    return updatedAnnotation;
+  }
+
+  async deleteAnnotation(id: string): Promise<boolean> {
+    // Get annotation to find session ID for cache invalidation
+    const annotation = await this.repository.findById(id);
+    if (!annotation) {
       return false;
     }
-  }
 
-  async updateAnnotation(sessionId: string, annotationId: string, updates: Partial<Annotation>): Promise<Annotation | null> {
-    try {
-      const key = `${this.ANNOTATIONS_PREFIX}${sessionId}`;
-      const existingAnnotationJson = await this.redis.hget(key, annotationId);
-      
-      if (!existingAnnotationJson) {
-        return null;
-      }
+    // Delete from database
+    const deleted = await this.repository.delete(id);
 
-      const existingAnnotation = JSON.parse(existingAnnotationJson);
-      const updatedAnnotation: Annotation = {
-        ...existingAnnotation,
-        ...updates,
-        id: annotationId, // Ensure ID doesn't change
-        createdAt: new Date(existingAnnotation.createdAt), // Preserve original creation time
-      };
-
-      await this.redis.hset(key, annotationId, JSON.stringify(updatedAnnotation));
-      return updatedAnnotation;
-    } catch (error) {
-      console.error('Error updating annotation:', error);
-      return null;
+    if (deleted) {
+      // Invalidate cache
+      await this.invalidateSessionCache(annotation.sessionId);
     }
+
+    return deleted;
   }
 
-  async clearSessionAnnotations(sessionId: string): Promise<void> {
-    try {
-      const key = `${this.ANNOTATIONS_PREFIX}${sessionId}`;
-      await this.redis.del(key);
-    } catch (error) {
-      console.error('Error clearing session annotations:', error);
-    }
+  async getAnnotationsByLineRange(
+    sessionId: string, 
+    lineStart: number, 
+    lineEnd: number
+  ): Promise<AnnotationData[]> {
+    return await this.repository.findByLineRange(sessionId, lineStart, lineEnd);
   }
 
-  async getAnnotationsByUser(sessionId: string, userId: string): Promise<Annotation[]> {
-    try {
-      const allAnnotations = await this.getSessionAnnotations(sessionId);
-      return allAnnotations.filter(annotation => annotation.userId === userId);
-    } catch (error) {
-      console.error('Error getting annotations by user:', error);
-      return [];
-    }
+  async clearSessionAnnotations(sessionId: string): Promise<number> {
+    const deletedCount = await this.repository.deleteBySessionId(sessionId);
+    
+    // Invalidate cache
+    await this.invalidateSessionCache(sessionId);
+    
+    return deletedCount;
   }
 
-  async getAnnotationsByLine(sessionId: string, lineNumber: number): Promise<Annotation[]> {
+  private async invalidateSessionCache(sessionId: string): Promise<void> {
     try {
-      const allAnnotations = await this.getSessionAnnotations(sessionId);
-      return allAnnotations.filter(annotation => 
-        lineNumber >= annotation.lineStart && lineNumber <= annotation.lineEnd
-      );
+      const cacheKey = `${this.CACHE_PREFIX}${sessionId}`;
+      await this.redis.del(cacheKey);
     } catch (error) {
-      console.error('Error getting annotations by line:', error);
-      return [];
+      console.warn('Cache invalidation error (Redis unavailable):', (error as Error).message);
     }
+    
+    }
+    
   }
-}

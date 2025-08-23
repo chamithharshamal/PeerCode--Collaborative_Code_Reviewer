@@ -2,9 +2,10 @@ import Redis from 'ioredis';
 import { Session, SessionState as SessionModelState } from '../models/Session';
 import { SessionRepository } from '../repositories/SessionRepository';
 import { redis } from '../config/database';
-import { AnnotationService } from './AnnotationService';
+import { AnnotationService, CreateAnnotationRequest, UpdateAnnotationRequest } from './AnnotationService';
 import { UserService } from './UserService';
 import { SessionState, Annotation, User } from '../types';
+import { AnnotationData } from '../models/Annotation';
 
 export interface SessionUpdate {
   participants?: string[];
@@ -196,13 +197,13 @@ export class SessionService {
     }
   }
 
-  async addAnnotation(sessionId: string, annotation: Omit<Annotation, 'id' | 'createdAt'>): Promise<Annotation> {
+  async addAnnotation(sessionId: string, annotation: CreateAnnotationRequest): Promise<AnnotationData> {
     try {
       // Update session activity
       await this.updateSessionActivity(sessionId);
       
       // Add annotation through annotation service
-      return await this.annotationService.addAnnotation(sessionId, annotation);
+      return await this.annotationService.createAnnotation(annotation);
     } catch (error) {
       console.error('Error adding annotation to session:', error);
       throw error;
@@ -211,16 +212,16 @@ export class SessionService {
 
   async removeAnnotation(sessionId: string, annotationId: string): Promise<boolean> {
     try {
-      return await this.annotationService.removeAnnotation(sessionId, annotationId);
+      return await this.annotationService.deleteAnnotation(annotationId);
     } catch (error) {
       console.error('Error removing annotation from session:', error);
       return false;
     }
   }
 
-  async updateAnnotation(sessionId: string, annotationId: string, updates: Partial<Annotation>): Promise<Annotation | null> {
+  async updateAnnotation(sessionId: string, annotationId: string, updates: UpdateAnnotationRequest): Promise<AnnotationData | null> {
     try {
-      return await this.annotationService.updateAnnotation(sessionId, annotationId, updates);
+      return await this.annotationService.updateAnnotation(annotationId, updates);
     } catch (error) {
       console.error('Error updating annotation in session:', error);
       return null;

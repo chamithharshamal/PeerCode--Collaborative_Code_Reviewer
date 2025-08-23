@@ -185,7 +185,7 @@ describe('WebSocket Integration Tests', () => {
         clientSocket2.on('annotation-added', (data: any) => {
           expect(data.annotation.content).toBe('This is a test annotation');
           expect(data.userId).toBe('user-1');
-          expect(mockAnnotationService.addAnnotation).toHaveBeenCalled();
+          expect(mockAnnotationService.createAnnotation).toHaveBeenCalled();
           done();
         });
 

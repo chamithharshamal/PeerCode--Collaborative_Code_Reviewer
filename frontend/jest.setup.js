@@ -1,4 +1,8 @@
+// Import jest-dom matchers
 import '@testing-library/jest-dom'
+
+// Extend expect with jest-dom matchers
+import { expect } from '@jest/globals'
 
 // Mock Next.js router
 jest.mock('next/navigation', () => ({

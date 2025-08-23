@@ -44,6 +44,14 @@ export class WebSocketService {
         await this.handleAddAnnotation(socket, data);
       });
 
+      socket.on('update-annotation', async (data) => {
+        await this.handleUpdateAnnotation(socket, data);
+      });
+
+      socket.on('delete-annotation', async (data) => {
+        await this.handleDeleteAnnotation(socket, data);
+      });
+
       socket.on('highlight-code', (data) => {
         this.handleHighlightCode(socket, data);
       });
@@ -139,7 +147,17 @@ export class WebSocketService {
 
   private async handleAddAnnotation(
     socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
-    data: { sessionId: string; annotation: Annotation }
+    data: { 
+      sessionId: string; 
+      annotation: {
+        lineStart: number;
+        lineEnd: number;
+        columnStart: number;
+        columnEnd: number;
+        content: string;
+        type: 'comment' | 'suggestion' | 'question';
+      }
+    }
   ): Promise<void> {
     try {
       const { sessionId, annotation } = data;
@@ -153,11 +171,16 @@ export class WebSocketService {
         return;
       }
 
-      // Save annotation using AnnotationService
-      const newAnnotation = await this.annotationService.addAnnotation(sessionId, {
-        ...annotation,
+      // Create annotation using the new AnnotationService
+      const newAnnotation = await this.annotationService.createAnnotation({
         userId,
         sessionId,
+        lineStart: annotation.lineStart,
+        lineEnd: annotation.lineEnd,
+        columnStart: annotation.columnStart,
+        columnEnd: annotation.columnEnd,
+        content: annotation.content,
+        type: annotation.type,
       });
 
       // Broadcast to all participants in the session
@@ -172,6 +195,115 @@ export class WebSocketService {
       socket.emit('error', {
         message: 'Failed to add annotation',
         code: 'ADD_ANNOTATION_ERROR',
+      });
+    }
+  }
+
+  private async handleUpdateAnnotation(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
+    data: { 
+      sessionId: string; 
+      annotationId: string;
+      updates: {
+        content?: string;
+        type?: 'comment' | 'suggestion' | 'question';
+        lineStart?: number;
+        lineEnd?: number;
+        columnStart?: number;
+        columnEnd?: number;
+      }
+    }
+  ): Promise<void> {
+    try {
+      const { sessionId, annotationId, updates } = data;
+      const userId = socket.data.userId;
+
+      if (!userId || socket.data.sessionId !== sessionId) {
+        socket.emit('error', {
+          message: 'Unauthorized to update annotation',
+          code: 'UNAUTHORIZED',
+        });
+        return;
+      }
+
+      // Check if user owns the annotation
+      const existingAnnotation = await this.annotationService.getAnnotation(annotationId);
+      if (!existingAnnotation || existingAnnotation.userId !== userId) {
+        socket.emit('error', {
+          message: 'Annotation not found or access denied',
+          code: 'ANNOTATION_ACCESS_DENIED',
+        });
+        return;
+      }
+
+      // Update annotation
+      const updatedAnnotation = await this.annotationService.updateAnnotation(annotationId, updates);
+
+      // Broadcast to all participants in the session
+      this.io.to(sessionId).emit('annotation-updated', {
+        annotation: updatedAnnotation,
+        userId,
+      });
+
+      console.log(`Annotation ${annotationId} updated in session ${sessionId} by user ${userId}`);
+    } catch (error) {
+      console.error('Error handling update annotation:', error);
+      socket.emit('error', {
+        message: 'Failed to update annotation',
+        code: 'UPDATE_ANNOTATION_ERROR',
+      });
+    }
+  }
+
+  private async handleDeleteAnnotation(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
+    data: { sessionId: string; annotationId: string }
+  ): Promise<void> {
+    try {
+      const { sessionId, annotationId } = data;
+      const userId = socket.data.userId;
+
+      if (!userId || socket.data.sessionId !== sessionId) {
+        socket.emit('error', {
+          message: 'Unauthorized to delete annotation',
+          code: 'UNAUTHORIZED',
+        });
+        return;
+      }
+
+      // Check if user owns the annotation
+      const existingAnnotation = await this.annotationService.getAnnotation(annotationId);
+      if (!existingAnnotation || existingAnnotation.userId !== userId) {
+        socket.emit('error', {
+          message: 'Annotation not found or access denied',
+          code: 'ANNOTATION_ACCESS_DENIED',
+        });
+        return;
+      }
+
+      // Delete annotation
+      const deleted = await this.annotationService.deleteAnnotation(annotationId);
+      
+      if (!deleted) {
+        socket.emit('error', {
+          message: 'Failed to delete annotation',
+          code: 'DELETE_ANNOTATION_ERROR',
+        });
+        return;
+      }
+
+      // Broadcast to all participants in the session
+      this.io.to(sessionId).emit('annotation-deleted', {
+        annotationId,
+        userId,
+      });
+
+      console.log(`Annotation ${annotationId} deleted in session ${sessionId} by user ${userId}`);
+    } catch (error) {
+      console.error('Error handling delete annotation:', error);
+      socket.emit('error', {
+        message: 'Failed to delete annotation',
+        code: 'DELETE_ANNOTATION_ERROR',
       });
     }
   }

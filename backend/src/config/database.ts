@@ -51,6 +51,23 @@ export const initializeDatabase = async (): Promise<void> => {
       );
     `);
 
+    // Create annotations table if it doesn't exist
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS annotations (
+        id UUID PRIMARY KEY,
+        user_id UUID NOT NULL,
+        session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        line_start INTEGER NOT NULL,
+        line_end INTEGER NOT NULL,
+        column_start INTEGER NOT NULL,
+        column_end INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        type VARCHAR(20) NOT NULL CHECK (type IN ('comment', 'suggestion', 'question')),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `);
+
     // Create indexes for better performance
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_sessions_creator_id ON sessions(creator_id);
@@ -58,6 +75,10 @@ export const initializeDatabase = async (): Promise<void> => {
       CREATE INDEX IF NOT EXISTS idx_sessions_last_activity ON sessions(last_activity);
       CREATE INDEX IF NOT EXISTS idx_session_participants_session_id ON session_participants(session_id);
       CREATE INDEX IF NOT EXISTS idx_session_participants_user_id ON session_participants(user_id);
+      CREATE INDEX IF NOT EXISTS idx_annotations_session_id ON annotations(session_id);
+      CREATE INDEX IF NOT EXISTS idx_annotations_user_id ON annotations(user_id);
+      CREATE INDEX IF NOT EXISTS idx_annotations_line_range ON annotations(session_id, line_start, line_end);
+      CREATE INDEX IF NOT EXISTS idx_annotations_created_at ON annotations(created_at);
     `);
 
     client.release();

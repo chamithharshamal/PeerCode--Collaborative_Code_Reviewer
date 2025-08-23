@@ -91,6 +91,34 @@ export const useCollaboration = ({ sessionId, onError }: UseCollaborationOptions
     return () => off('annotation-added', handleAnnotationAdded);
   }, [on, off]);
 
+  // Handle annotation updated
+  useEffect(() => {
+    const handleAnnotationUpdated = (data: { annotation: Annotation; userId: string }) => {
+      setState(prev => ({
+        ...prev,
+        annotations: prev.annotations.map(ann => 
+          ann.id === data.annotation.id ? data.annotation : ann
+        ),
+      }));
+    };
+
+    on('annotation-updated', handleAnnotationUpdated);
+    return () => off('annotation-updated', handleAnnotationUpdated);
+  }, [on, off]);
+
+  // Handle annotation deleted
+  useEffect(() => {
+    const handleAnnotationDeleted = (data: { annotationId: string; userId: string }) => {
+      setState(prev => ({
+        ...prev,
+        annotations: prev.annotations.filter(ann => ann.id !== data.annotationId),
+      }));
+    };
+
+    on('annotation-deleted', handleAnnotationDeleted);
+    return () => off('annotation-deleted', handleAnnotationDeleted);
+  }, [on, off]);
+
   // Handle code highlighted
   useEffect(() => {
     const handleCodeHighlighted = (data: { range: CodeRange; userId: string }) => {
@@ -137,15 +165,44 @@ export const useCollaboration = ({ sessionId, onError }: UseCollaborationOptions
   }, [on, off, onError]);
 
   // Collaboration actions
-  const addAnnotation = useCallback((annotation: Omit<Annotation, 'id' | 'userId' | 'sessionId' | 'createdAt'>) => {
+  const addAnnotation = useCallback((annotation: {
+    lineStart: number;
+    lineEnd: number;
+    columnStart: number;
+    columnEnd: number;
+    content: string;
+    type: 'comment' | 'suggestion' | 'question';
+  }) => {
     if (connected) {
       emit('add-annotation', {
         sessionId,
-        annotation: {
-          ...annotation,
-          userId: 'current-user-id', // TODO: Get actual user ID
-          sessionId,
-        },
+        annotation,
+      });
+    }
+  }, [connected, emit, sessionId]);
+
+  const updateAnnotation = useCallback((annotationId: string, updates: {
+    content?: string;
+    type?: 'comment' | 'suggestion' | 'question';
+    lineStart?: number;
+    lineEnd?: number;
+    columnStart?: number;
+    columnEnd?: number;
+  }) => {
+    if (connected) {
+      emit('update-annotation', {
+        sessionId,
+        annotationId,
+        updates,
+      });
+    }
+  }, [connected, emit, sessionId]);
+
+  const deleteAnnotation = useCallback((annotationId: string) => {
+    if (connected) {
+      emit('delete-annotation', {
+        sessionId,
+        annotationId,
       });
     }
   }, [connected, emit, sessionId]);
@@ -193,6 +250,8 @@ export const useCollaboration = ({ sessionId, onError }: UseCollaborationOptions
   return {
     ...state,
     addAnnotation,
+    updateAnnotation,
+    deleteAnnotation,
     highlightCode,
     sendTypingIndicator,
   };
