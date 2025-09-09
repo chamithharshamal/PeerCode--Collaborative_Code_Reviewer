@@ -16,6 +16,7 @@ import authRoutes from './routes/auth';
 import codeSnippetRoutes from './routes/codeSnippet';
 import sessionRoutes from './routes/session';
 import annotationRoutes from './routes/annotation';
+import aiAnalysisRoutes from './routes/aiAnalysis';
 import { initializeDatabase, closeConnections } from './config/database';
 import { SessionCleanupService } from './services/SessionCleanupService';
 import { WebSocketService } from './services/WebSocketService';
@@ -57,6 +58,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/code-snippets', codeSnippetRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api', annotationRoutes);
+app.use('/api/ai', aiAnalysisRoutes);
 
 // Basic health check route
 app.get('/health', (req, res) => {

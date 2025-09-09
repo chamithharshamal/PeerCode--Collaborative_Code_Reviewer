@@ -66,6 +66,10 @@
 
 - [ ] 7. Integrate Hugging Face CodeBERT for AI analysis
 
+
+
+
+
   - Set up Hugging Face API client and authentication
   - Create AI analysis service with CodeBERT integration
   - Implement code analysis pipeline with error handling

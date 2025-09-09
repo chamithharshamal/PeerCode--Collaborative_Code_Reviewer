@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { CodeSnippet } from '../../types';
 
@@ -8,6 +8,8 @@ interface CodeUploadProps {
   onUploadSuccess: (codeSnippet: CodeSnippet) => void;
   onUploadError: (error: string) => void;
   className?: string;
+  maxSize?: number;
+  allowedFileTypes?: string[];
 }
 
 interface UploadResponse {
@@ -17,17 +19,103 @@ interface UploadResponse {
   details?: string[];
 }
 
-export default function CodeUpload({ onUploadSuccess, onUploadError, className = '' }: CodeUploadProps) {
+interface ValidationError {
+  type: 'file' | 'content' | 'size' | 'extension';
+  message: string;
+}
+
+export default function CodeUpload({ 
+  onUploadSuccess, 
+  onUploadError, 
+  className = '',
+  maxSize = 1024 * 1024, // 1MB default
+  allowedFileTypes = ['.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.cpp', '.c', '.cs', '.php', '.rb', '.go', '.rs', '.swift', '.kt', '.scala', '.sh', '.bash', '.sql', '.html', '.css', '.scss', '.json', '.xml', '.yaml', '.yml', '.md', '.txt']
+}: CodeUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [textContent, setTextContent] = useState('');
   const [filename, setFilename] = useState('');
   const [language, setLanguage] = useState('');
   const [uploadMode, setUploadMode] = useState<'file' | 'text'>('file');
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
+  const [dragCounter, setDragCounter] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+  // Client-side validation
+  const validateFile = (file: File): ValidationError[] => {
+    const errors: ValidationError[] = [];
+    
+    // Check file size
+    if (file.size > maxSize) {
+      errors.push({
+        type: 'size',
+        message: `File size (${formatFileSize(file.size)}) exceeds maximum allowed size (${formatFileSize(maxSize)})`
+      });
+    }
+    
+    // Check file extension
+    const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+    if (!allowedFileTypes.includes(fileExtension)) {
+      errors.push({
+        type: 'extension',
+        message: `File type ${fileExtension} is not supported. Allowed types: ${allowedFileTypes.join(', ')}`
+      });
+    }
+    
+    // Check if file is empty
+    if (file.size === 0) {
+      errors.push({
+        type: 'file',
+        message: 'File is empty'
+      });
+    }
+    
+    return errors;
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const onDrop = useCallback(async (acceptedFiles: File[], rejectedFiles: any[]) => {
+    setValidationErrors([]);
+    
+    // Handle rejected files
+    if (rejectedFiles.length > 0) {
+      const errors: ValidationError[] = [];
+      rejectedFiles.forEach(({ file, errors: fileErrors }) => {
+        fileErrors.forEach((error: any) => {
+          if (error.code === 'file-too-large') {
+            errors.push({
+              type: 'size',
+              message: `File size (${formatFileSize(file.size)}) exceeds maximum allowed size (${formatFileSize(maxSize)})`
+            });
+          } else if (error.code === 'file-invalid-type') {
+            errors.push({
+              type: 'extension',
+              message: `File type is not supported. Allowed types: ${allowedFileTypes.join(', ')}`
+            });
+          }
+        });
+      });
+      setValidationErrors(errors);
+      return;
+    }
+
     if (acceptedFiles.length === 0) return;
 
     const file = acceptedFiles[0];
+    
+    // Additional client-side validation
+    const validationErrors = validateFile(file);
+    if (validationErrors.length > 0) {
+      setValidationErrors(validationErrors);
+      return;
+    }
+
     setIsUploading(true);
 
     try {
@@ -43,6 +131,7 @@ export default function CodeUpload({ onUploadSuccess, onUploadError, className =
 
       if (result.success && result.data) {
         onUploadSuccess(result.data);
+        setValidationErrors([]);
       } else {
         const errorMessage = result.error || 'Upload failed';
         const details = result.details ? ` Details: ${result.details.join(', ')}` : '';
@@ -54,11 +143,26 @@ export default function CodeUpload({ onUploadSuccess, onUploadError, className =
     } finally {
       setIsUploading(false);
     }
-  }, [onUploadSuccess, onUploadError]);
+  }, [onUploadSuccess, onUploadError, maxSize, allowedFileTypes]);
 
   const handleTextUpload = async () => {
+    setValidationErrors([]);
+    
     if (!textContent.trim()) {
-      onUploadError('Please enter some code content');
+      setValidationErrors([{
+        type: 'content',
+        message: 'Please enter some code content'
+      }]);
+      return;
+    }
+
+    // Client-side validation for text content
+    const contentSize = new Blob([textContent]).size;
+    if (contentSize > maxSize) {
+      setValidationErrors([{
+        type: 'size',
+        message: `Content size (${formatFileSize(contentSize)}) exceeds maximum allowed size (${formatFileSize(maxSize)})`
+      }]);
       return;
     }
 
@@ -84,6 +188,7 @@ export default function CodeUpload({ onUploadSuccess, onUploadError, className =
         setTextContent('');
         setFilename('');
         setLanguage('');
+        setValidationErrors([]);
       } else {
         const errorMessage = result.error || 'Upload failed';
         const details = result.details ? ` Details: ${result.details.join(', ')}` : '';
@@ -100,11 +205,12 @@ export default function CodeUpload({ onUploadSuccess, onUploadError, className =
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'text/*': ['.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.cpp', '.c', '.cs', '.php', '.rb', '.go', '.rs', '.swift', '.kt', '.scala', '.sh', '.bash', '.sql', '.html', '.css', '.scss', '.json', '.xml', '.yaml', '.yml', '.md', '.txt'],
+      'text/*': allowedFileTypes,
     },
     maxFiles: 1,
-    maxSize: 1024 * 1024, // 1MB
+    maxSize: maxSize,
     disabled: isUploading,
+    multiple: false,
   });
 
   const supportedLanguages = [
@@ -118,7 +224,10 @@ export default function CodeUpload({ onUploadSuccess, onUploadError, className =
       <div className="mb-4">
         <div className="flex space-x-4 mb-4">
           <button
-            onClick={() => setUploadMode('file')}
+            onClick={() => {
+              setUploadMode('file');
+              setValidationErrors([]);
+            }}
             className={`px-4 py-2 rounded-md font-medium ${
               uploadMode === 'file'
                 ? 'bg-blue-600 text-white'
@@ -128,7 +237,10 @@ export default function CodeUpload({ onUploadSuccess, onUploadError, className =
             Upload File
           </button>
           <button
-            onClick={() => setUploadMode('text')}
+            onClick={() => {
+              setUploadMode('text');
+              setValidationErrors([]);
+            }}
             className={`px-4 py-2 rounded-md font-medium ${
               uploadMode === 'text'
                 ? 'bg-blue-600 text-white'
@@ -139,6 +251,29 @@ export default function CodeUpload({ onUploadSuccess, onUploadError, className =
           </button>
         </div>
       </div>
+
+      {/* Validation Errors */}
+      {validationErrors.length > 0 && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-md p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">Validation Errors</h3>
+              <div className="mt-2 text-sm text-red-700">
+                <ul className="list-disc list-inside space-y-1">
+                  {validationErrors.map((error, index) => (
+                    <li key={index}>{error.message}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {uploadMode === 'file' ? (
         <div

@@ -18,6 +18,10 @@ export class WebSocketService {
   private activeSessions: Map<string, Set<string>> = new Map(); // sessionId -> Set of socketIds
   private userSockets: Map<string, string> = new Map(); // userId -> socketId
   private typingUsers: Map<string, Set<string>> = new Map(); // sessionId -> Set of userIds
+  private connectionAttempts: Map<string, number> = new Map(); // socketId -> attempt count
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private readonly MAX_RECONNECT_ATTEMPTS = 5;
+  private readonly HEARTBEAT_INTERVAL = 30000; // 30 seconds
 
   constructor(
     io: Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
@@ -30,6 +34,7 @@ export class WebSocketService {
     this.userService = userService;
     this.annotationService = annotationService || new AnnotationService();
     this.setupEventHandlers();
+    this.startHeartbeat();
   }
 
   private setupEventHandlers(): void {
@@ -58,6 +63,14 @@ export class WebSocketService {
 
       socket.on('typing-indicator', (data) => {
         this.handleTypingIndicator(socket, data);
+      });
+
+      socket.on('heartbeat', () => {
+        this.handleHeartbeat(socket);
+      });
+
+      socket.on('request-session-state', (data) => {
+        this.handleRequestSessionState(socket, data);
       });
 
       socket.on('disconnect', () => {
@@ -446,22 +459,104 @@ export class WebSocketService {
     this.io.to(sessionId).emit('debate-response', { response });
   }
 
+  private handleHeartbeat(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>
+  ): void {
+    // Reset connection attempts on successful heartbeat
+    this.connectionAttempts.delete(socket.id);
+    socket.emit('heartbeat-ack');
+  }
+
+  private async handleRequestSessionState(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
+    data: { sessionId: string }
+  ): Promise<void> {
+    try {
+      const { sessionId } = data;
+      const userId = socket.data.userId;
+
+      if (!userId || socket.data.sessionId !== sessionId) {
+        socket.emit('error', {
+          message: 'Unauthorized to request session state',
+          code: 'UNAUTHORIZED',
+        });
+        return;
+      }
+
+      const sessionState = await this.sessionService.getSessionState(sessionId);
+      const participants = await this.getSessionParticipants(sessionId);
+
+      if (sessionState) {
+        socket.emit('session-state-update', {
+          participants,
+          sessionState,
+        });
+      }
+    } catch (error) {
+      console.error('Error handling request session state:', error);
+      socket.emit('error', {
+        message: 'Failed to get session state',
+        code: 'SESSION_STATE_ERROR',
+      });
+    }
+  }
+
+  private startHeartbeat(): void {
+    this.heartbeatInterval = setInterval(() => {
+      this.io.emit('heartbeat-ping');
+    }, this.HEARTBEAT_INTERVAL);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  // Enhanced connection management
+  public async handleConnectionError(socketId: string, error: any): Promise<void> {
+    const attempts = this.connectionAttempts.get(socketId) || 0;
+    this.connectionAttempts.set(socketId, attempts + 1);
+
+    if (attempts >= this.MAX_RECONNECT_ATTEMPTS) {
+      console.log(`Max reconnection attempts reached for socket ${socketId}`);
+      this.connectionAttempts.delete(socketId);
+    }
+  }
+
   // Get connection statistics
   public getConnectionStats(): {
     totalConnections: number;
     activeSessions: number;
     sessionsWithUsers: { [sessionId: string]: number };
+    connectionAttempts: { [socketId: string]: number };
   } {
     const sessionsWithUsers: { [sessionId: string]: number } = {};
+    const connectionAttempts: { [socketId: string]: number } = {};
     
     for (const [sessionId, sockets] of this.activeSessions.entries()) {
       sessionsWithUsers[sessionId] = sockets.size;
+    }
+
+    for (const [socketId, attempts] of this.connectionAttempts.entries()) {
+      connectionAttempts[socketId] = attempts;
     }
 
     return {
       totalConnections: this.io.engine.clientsCount,
       activeSessions: this.activeSessions.size,
       sessionsWithUsers,
+      connectionAttempts,
     };
+  }
+
+  // Cleanup method
+  public cleanup(): void {
+    this.stopHeartbeat();
+    this.activeSessions.clear();
+    this.userSockets.clear();
+    this.typingUsers.clear();
+    this.connectionAttempts.clear();
   }
 }

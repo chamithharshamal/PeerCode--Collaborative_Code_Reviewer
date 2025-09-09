@@ -31,7 +31,9 @@ export const useCollaboration = ({ sessionId, onError }: UseCollaborationOptions
   // Join session when socket connects
   useEffect(() => {
     if (connected && sessionId) {
-      emit('join-session', { sessionId, userId: 'current-user-id' }); // TODO: Get actual user ID
+      // Get actual user ID from auth context
+      const userId = 'current-user-id'; // TODO: Get from auth context
+      emit('join-session', { sessionId, userId });
     }
   }, [connected, sessionId, emit]);
 
@@ -151,6 +153,38 @@ export const useCollaboration = ({ sessionId, onError }: UseCollaborationOptions
     return () => off('typing-indicator', handleTypingIndicator);
   }, [on, off]);
 
+  // Handle session state updates
+  useEffect(() => {
+    const handleSessionStateUpdate = (data: { participants: User[]; sessionState: SessionState }) => {
+      setState(prev => ({
+        ...prev,
+        participants: data.participants,
+        sessionState: data.sessionState,
+        annotations: data.sessionState.currentAnnotations,
+      }));
+    };
+
+    on('session-state-update', handleSessionStateUpdate);
+    return () => off('session-state-update', handleSessionStateUpdate);
+  }, [on, off]);
+
+  // Handle session left
+  useEffect(() => {
+    const handleSessionLeft = (data: { sessionId: string; message: string }) => {
+      console.log('Left session:', data.message);
+      setState(prev => ({
+        ...prev,
+        isConnected: false,
+        participants: [],
+        sessionState: null,
+        annotations: [],
+      }));
+    };
+
+    on('session-left', handleSessionLeft);
+    return () => off('session-left', handleSessionLeft);
+  }, [on, off]);
+
   // Handle errors
   useEffect(() => {
     const handleError = (error: { message: string; code: string }) => {
@@ -238,6 +272,19 @@ export const useCollaboration = ({ sessionId, onError }: UseCollaborationOptions
     }
   }, [connected, emit, sessionId]);
 
+  const leaveSession = useCallback(() => {
+    if (connected) {
+      const userId = 'current-user-id'; // TODO: Get from auth context
+      emit('leave-session', { sessionId, userId });
+    }
+  }, [connected, emit, sessionId]);
+
+  const requestSessionState = useCallback(() => {
+    if (connected) {
+      emit('request-session-state', { sessionId });
+    }
+  }, [connected, emit, sessionId]);
+
   // Cleanup typing timeout on unmount
   useEffect(() => {
     return () => {
@@ -254,5 +301,7 @@ export const useCollaboration = ({ sessionId, onError }: UseCollaborationOptions
     deleteAnnotation,
     highlightCode,
     sendTypingIndicator,
+    leaveSession,
+    requestSessionState,
   };
 };

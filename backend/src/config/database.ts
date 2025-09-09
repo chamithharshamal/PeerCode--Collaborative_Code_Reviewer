@@ -68,6 +68,20 @@ export const initializeDatabase = async (): Promise<void> => {
       );
     `);
 
+    // Create code_snippets table if it doesn't exist
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS code_snippets (
+        id UUID PRIMARY KEY,
+        content TEXT NOT NULL,
+        language VARCHAR(50) NOT NULL,
+        filename VARCHAR(255),
+        size INTEGER NOT NULL,
+        uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `);
+
     // Create indexes for better performance
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_sessions_creator_id ON sessions(creator_id);
@@ -79,6 +93,9 @@ export const initializeDatabase = async (): Promise<void> => {
       CREATE INDEX IF NOT EXISTS idx_annotations_user_id ON annotations(user_id);
       CREATE INDEX IF NOT EXISTS idx_annotations_line_range ON annotations(session_id, line_start, line_end);
       CREATE INDEX IF NOT EXISTS idx_annotations_created_at ON annotations(created_at);
+      CREATE INDEX IF NOT EXISTS idx_code_snippets_language ON code_snippets(language);
+      CREATE INDEX IF NOT EXISTS idx_code_snippets_uploaded_at ON code_snippets(uploaded_at);
+      CREATE INDEX IF NOT EXISTS idx_code_snippets_size ON code_snippets(size);
     `);
 
     client.release();

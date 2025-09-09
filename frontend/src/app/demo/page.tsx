@@ -3,22 +3,32 @@
 import React, { useState } from 'react';
 import CodeUpload from '../../components/code/CodeUpload';
 import CodeViewer from '../../components/code/CodeViewer';
+import CodeSnippetList from '../../components/code/CodeSnippetList';
 import { CodeSnippet } from '../../types';
 
 export default function DemoPage() {
   const [uploadedSnippet, setUploadedSnippet] = useState<CodeSnippet | null>(null);
+  const [selectedSnippet, setSelectedSnippet] = useState<CodeSnippet | null>(null);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'upload' | 'view' | 'list'>('upload');
 
   const handleUploadSuccess = (codeSnippet: CodeSnippet) => {
     setUploadedSnippet(codeSnippet);
+    setSelectedSnippet(codeSnippet);
     setSuccess(`Successfully uploaded: ${codeSnippet.filename || 'Untitled'}`);
     setError('');
+    setActiveTab('view');
   };
 
   const handleUploadError = (errorMessage: string) => {
     setError(errorMessage);
     setSuccess('');
+  };
+
+  const handleSnippetSelect = (snippet: CodeSnippet) => {
+    setSelectedSnippet(snippet);
+    setActiveTab('view');
   };
 
   const clearMessages = () => {
@@ -28,13 +38,13 @@ export default function DemoPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Code Upload & Viewer Demo
+            Code Upload & Validation System Demo
           </h1>
           <p className="text-gray-600">
-            Test the code snippet upload and validation system with syntax highlighting.
+            Test the complete code snippet upload, validation, and management system with database integration.
           </p>
         </div>
 
@@ -48,18 +58,18 @@ export default function DemoPage() {
                 </svg>
               </div>
               <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">Upload Error</h3>
-                <div className="mt-2 text-sm text-red-700">
-                  <p>{error}</p>
-                </div>
-                <div className="mt-4">
-                  <button
-                    onClick={clearMessages}
-                    className="bg-red-100 px-2 py-1 rounded text-sm text-red-800 hover:bg-red-200"
-                  >
-                    Dismiss
-                  </button>
-                </div>
+                <h3 className="text-sm font-medium text-red-800">Error</h3>
+                <div className="mt-2 text-sm text-red-700">{error}</div>
+              </div>
+              <div className="ml-auto pl-3">
+                <button
+                  onClick={clearMessages}
+                  className="text-red-400 hover:text-red-600"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
@@ -74,112 +84,95 @@ export default function DemoPage() {
                 </svg>
               </div>
               <div className="ml-3">
-                <h3 className="text-sm font-medium text-green-800">Upload Successful</h3>
-                <div className="mt-2 text-sm text-green-700">
-                  <p>{success}</p>
-                </div>
-                <div className="mt-4">
-                  <button
-                    onClick={clearMessages}
-                    className="bg-green-100 px-2 py-1 rounded text-sm text-green-800 hover:bg-green-200"
-                  >
-                    Dismiss
-                  </button>
-                </div>
+                <h3 className="text-sm font-medium text-green-800">Success</h3>
+                <div className="mt-2 text-sm text-green-700">{success}</div>
+              </div>
+              <div className="ml-auto pl-3">
+                <button
+                  onClick={clearMessages}
+                  className="text-green-400 hover:text-green-600"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Upload Section */}
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Upload Code</h2>
+        {/* Tab Navigation */}
+        <div className="mb-6">
+          <nav className="flex space-x-8">
+            <button
+              onClick={() => setActiveTab('upload')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'upload'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Upload Code
+            </button>
+            <button
+              onClick={() => setActiveTab('view')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'view'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              View Code
+            </button>
+            <button
+              onClick={() => setActiveTab('list')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'list'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Browse Snippets
+            </button>
+          </nav>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'upload' && (
+          <div className="max-w-2xl">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Upload Code Snippet</h2>
             <CodeUpload
               onUploadSuccess={handleUploadSuccess}
               onUploadError={handleUploadError}
             />
           </div>
+        )}
 
-          {/* Viewer Section */}
+        {activeTab === 'view' && (
           <div>
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Code Viewer</h2>
-            {uploadedSnippet ? (
-              <CodeViewer
-                codeSnippet={uploadedSnippet}
-                height="500px"
-              />
+            {selectedSnippet ? (
+              <CodeViewer codeSnippet={selectedSnippet} height="600px" />
             ) : (
               <div className="bg-white rounded-lg shadow-md p-8 text-center text-gray-500">
-                <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <p>Upload a code file to see it here with syntax highlighting</p>
+                <p>Select a code snippet from the list to view it here</p>
               </div>
             )}
           </div>
-        </div>
+        )}
 
-        {/* Features Section */}
-        <div className="mt-12">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Features Implemented</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-2">File Upload</h3>
-              <ul className="text-sm text-gray-600 space-y-1">
-                <li>• Drag and drop support</li>
-                <li>• File size validation (1MB limit)</li>
-                <li>• File type validation</li>
-                <li>• Multiple programming languages</li>
-              </ul>
-            </div>
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Text Upload</h3>
-              <ul className="text-sm text-gray-600 space-y-1">
-                <li>• Paste code directly</li>
-                <li>• Auto language detection</li>
-                <li>• Manual language selection</li>
-                <li>• Content validation</li>
-              </ul>
-            </div>
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Code Viewer</h3>
-              <ul className="text-sm text-gray-600 space-y-1">
-                <li>• Syntax highlighting</li>
-                <li>• Line numbers</li>
-                <li>• File information display</li>
-                <li>• Monaco Editor integration</li>
-              </ul>
-            </div>
+        {activeTab === 'list' && (
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Code Snippets Library</h2>
+            <CodeSnippetList
+              onSnippetSelect={handleSnippetSelect}
+              selectedSnippetId={selectedSnippet?.id}
+            />
           </div>
-        </div>
-
-        {/* API Information */}
-        <div className="mt-12 bg-blue-50 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-blue-900 mb-4">API Endpoints</h2>
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center space-x-2">
-              <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium">POST</span>
-              <code className="text-blue-800">/api/code-snippets/upload</code>
-              <span className="text-gray-600">- Upload file</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium">POST</span>
-              <code className="text-blue-800">/api/code-snippets/upload-text</code>
-              <span className="text-gray-600">- Upload text content</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">GET</span>
-              <code className="text-blue-800">/api/code-snippets/:id</code>
-              <span className="text-gray-600">- Get code snippet</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-medium">DELETE</span>
-              <code className="text-blue-800">/api/code-snippets/:id</code>
-              <span className="text-gray-600">- Delete code snippet</span>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

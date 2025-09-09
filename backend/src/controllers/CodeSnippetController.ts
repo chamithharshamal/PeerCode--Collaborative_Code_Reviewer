@@ -206,3 +206,110 @@ export async function deleteCodeSnippet(req: Request, res: Response): Promise<vo
     });
   }
 }
+
+/**
+ * Get all code snippets
+ */
+export async function getAllCodeSnippets(req: Request, res: Response): Promise<void> {
+  try {
+    const { language, search, limit = '50', offset = '0' } = req.query;
+
+    let snippets;
+    if (language && typeof language === 'string') {
+      snippets = await codeSnippetService.getCodeSnippetsByLanguage(language);
+    } else if (search && typeof search === 'string') {
+      snippets = await codeSnippetService.searchCodeSnippets(search);
+    } else {
+      snippets = await codeSnippetService.getAllCodeSnippets();
+    }
+
+    // Apply pagination
+    const limitNum = parseInt(limit as string, 10);
+    const offsetNum = parseInt(offset as string, 10);
+    const paginatedSnippets = snippets.slice(offsetNum, offsetNum + limitNum);
+
+    res.json({
+      success: true,
+      data: {
+        snippets: paginatedSnippets,
+        total: snippets.length,
+        limit: limitNum,
+        offset: offsetNum
+      }
+    });
+  } catch (error) {
+    console.error('Error getting code snippets:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+    });
+  }
+}
+
+/**
+ * Update a code snippet
+ */
+export async function updateCodeSnippet(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { content, language, filename } = req.body;
+
+    if (!id) {
+      res.status(400).json({
+        success: false,
+        error: 'Code snippet ID is required',
+      });
+      return;
+    }
+
+    const updates: any = {};
+    if (content !== undefined) updates.content = content;
+    if (language !== undefined) updates.language = language;
+    if (filename !== undefined) updates.filename = filename;
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({
+        success: false,
+        error: 'No updates provided',
+      });
+      return;
+    }
+
+    // If content is being updated, validate it
+    if (updates.content) {
+      const size = Buffer.byteLength(updates.content, 'utf8');
+      const actualFilename = updates.filename || 'snippet.txt';
+      const validation = validateFile(actualFilename, updates.content, size);
+      
+      if (!validation.isValid) {
+        res.status(400).json({
+          success: false,
+          error: 'Content validation failed',
+          details: validation.errors,
+        });
+        return;
+      }
+    }
+
+    const updatedSnippet = await codeSnippetService.updateCodeSnippet(id, updates);
+
+    if (!updatedSnippet) {
+      res.status(404).json({
+        success: false,
+        error: 'Code snippet not found',
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: updatedSnippet,
+    });
+  } catch (error) {
+    console.error('Error updating code snippet:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+    });
+  }
+}

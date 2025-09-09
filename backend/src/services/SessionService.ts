@@ -4,7 +4,7 @@ import { SessionRepository } from '../repositories/SessionRepository';
 import { redis } from '../config/database';
 import { AnnotationService, CreateAnnotationRequest, UpdateAnnotationRequest } from './AnnotationService';
 import { UserService } from './UserService';
-import { SessionState, Annotation, User } from '../types';
+import { SessionState, Annotation, User, AISuggestion } from '../types';
 import { AnnotationData } from '../models/Annotation';
 
 export interface SessionUpdate {
@@ -133,6 +133,10 @@ export class SessionService {
     }
   }
 
+  async getById(sessionId: string): Promise<Session | null> {
+    return this.getSession(sessionId);
+  }
+
   async updateSessionActivity(sessionId: string): Promise<void> {
     try {
       const session = await this.getSession(sessionId);
@@ -225,6 +229,21 @@ export class SessionService {
     } catch (error) {
       console.error('Error updating annotation in session:', error);
       return null;
+    }
+  }
+
+  async updateAISuggestions(sessionId: string, suggestions: any[]): Promise<void> {
+    try {
+      // For now, we'll store AI suggestions in Redis cache
+      // In a full implementation, you might want to persist these in the database
+      const key = `${this.SESSION_PREFIX}${sessionId}:ai_suggestions`;
+      await this.redis.setex(key, this.SESSION_TIMEOUT, JSON.stringify(suggestions));
+      
+      // Update session activity
+      await this.updateSessionActivity(sessionId);
+    } catch (error) {
+      console.error('Error updating AI suggestions:', error);
+      throw error;
     }
   }
 
