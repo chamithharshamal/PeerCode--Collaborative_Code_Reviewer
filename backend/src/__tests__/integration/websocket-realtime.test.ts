@@ -93,18 +93,18 @@ describe('WebSocket Real-time Communication Integration Tests', () => {
 
     beforeEach(async () => {
       // Create test user
-      testUser = await userService.createUser({
+      testUser = await userService.register({
         email: 'test@example.com',
         password: 'password123',
-        name: 'Test User'
+        username: 'Test User'
       });
 
       // Create test session
-      testSession = await sessionService.createSession({
-        creatorId: testUser.id,
-        codeSnippetId: 'test-snippet-id',
-        maxParticipants: 5
-      });
+      testSession = await sessionService.createSession(
+        testUser.id,
+        'test-snippet-id',
+        5
+      );
     });
 
     it('should join session successfully', (done) => {
@@ -151,17 +151,17 @@ describe('WebSocket Real-time Communication Integration Tests', () => {
     let testSession: any;
 
     beforeEach(async () => {
-      testUser = await userService.createUser({
+      testUser = await userService.register({
         email: 'annotation@example.com',
         password: 'password123',
-        name: 'Annotation User'
+        username: 'Annotation User'
       });
 
-      testSession = await sessionService.createSession({
-        creatorId: testUser.id,
-        codeSnippetId: 'test-snippet-id',
-        maxParticipants: 5
-      });
+      testSession = await sessionService.createSession(
+        testUser.id,
+        'test-snippet-id',
+        5
+      );
 
       // Join session first
       clientSocket.emit('join-session', {
@@ -192,7 +192,7 @@ describe('WebSocket Real-time Communication Integration Tests', () => {
       });
     });
 
-    it('should update annotation successfully', async (done) => {
+    it('should update annotation successfully', async () => {
       // First add an annotation
       const annotation = await annotationService.createAnnotation({
         userId: testUser.id,
@@ -214,16 +214,19 @@ describe('WebSocket Real-time Communication Integration Tests', () => {
         }
       };
 
-      clientSocket.emit('update-annotation', updateData);
-
-      clientSocket.on('annotation-updated', (data) => {
-        expect(data.annotation.content).toBe('Updated content');
-        expect(data.annotation.type).toBe('suggestion');
-        done();
+      const updatePromise = new Promise<void>((resolve) => {
+        clientSocket.on('annotation-updated', (data) => {
+          expect(data.annotation.content).toBe('Updated content');
+          expect(data.annotation.type).toBe('suggestion');
+          resolve();
+        });
       });
+
+      clientSocket.emit('update-annotation', updateData);
+      await updatePromise;
     });
 
-    it('should delete annotation successfully', async (done) => {
+    it('should delete annotation successfully', async () => {
       // First add an annotation
       const annotation = await annotationService.createAnnotation({
         userId: testUser.id,
@@ -241,13 +244,16 @@ describe('WebSocket Real-time Communication Integration Tests', () => {
         annotationId: annotation.id
       };
 
-      clientSocket.emit('delete-annotation', deleteData);
-
-      clientSocket.on('annotation-deleted', (data) => {
-        expect(data.annotationId).toBe(annotation.id);
-        expect(data.userId).toBe(testUser.id);
-        done();
+      const deletePromise = new Promise<void>((resolve) => {
+        clientSocket.on('annotation-deleted', (data) => {
+          expect(data.annotationId).toBe(annotation.id);
+          expect(data.userId).toBe(testUser.id);
+          resolve();
+        });
       });
+
+      clientSocket.emit('delete-annotation', deleteData);
+      await deletePromise;
     });
   });
 
@@ -256,17 +262,17 @@ describe('WebSocket Real-time Communication Integration Tests', () => {
     let testSession: any;
 
     beforeEach(async () => {
-      testUser = await userService.createUser({
+      testUser = await userService.register({
         email: 'realtime@example.com',
         password: 'password123',
-        name: 'Real-time User'
+        username: 'Real-time User'
       });
 
-      testSession = await sessionService.createSession({
-        creatorId: testUser.id,
-        codeSnippetId: 'test-snippet-id',
-        maxParticipants: 5
-      });
+      testSession = await sessionService.createSession(
+        testUser.id,
+        'test-snippet-id',
+        5
+      );
 
       clientSocket.emit('join-session', {
         sessionId: testSession.id,
@@ -358,23 +364,23 @@ describe('WebSocket Real-time Communication Integration Tests', () => {
     let clientSocket2: ClientSocket;
 
     beforeEach(async () => {
-      testUser1 = await userService.createUser({
+      testUser1 = await userService.register({
         email: 'user1@example.com',
         password: 'password123',
-        name: 'User 1'
+        username: 'User 1'
       });
 
-      testUser2 = await userService.createUser({
+      testUser2 = await userService.register({
         email: 'user2@example.com',
         password: 'password123',
-        name: 'User 2'
+        username: 'User 2'
       });
 
-      testSession = await sessionService.createSession({
-        creatorId: testUser1.id,
-        codeSnippetId: 'test-snippet-id',
-        maxParticipants: 5
-      });
+      testSession = await sessionService.createSession(
+        testUser1.id,
+        'test-snippet-id',
+        5
+      );
 
       // Create second client
       clientSocket2 = Client('http://localhost:3001', {

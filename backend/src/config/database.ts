@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import Redis from 'ioredis';
+import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -21,6 +22,21 @@ export const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379'
 // Database initialization
 export const initializeDatabase = async (): Promise<void> => {
   try {
+    // Connect to MongoDB
+    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/collaborative-code-reviewer';
+    
+    try {
+      await mongoose.connect(mongoUri, {
+        serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+        bufferCommands: false // Disable mongoose buffering
+      });
+      console.log('MongoDB connected successfully');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.warn('MongoDB connection failed, continuing without MongoDB:', errorMessage);
+      console.warn('AI features (suggestions and debates) will not be available');
+    }
+
     // Test PostgreSQL connection
     const client = await pool.connect();
     console.log('PostgreSQL connected successfully');
@@ -113,6 +129,7 @@ export const initializeDatabase = async (): Promise<void> => {
 // Graceful shutdown
 export const closeConnections = async (): Promise<void> => {
   try {
+    await mongoose.disconnect();
     await pool.end();
     redis.disconnect();
     console.log('Database connections closed');

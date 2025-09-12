@@ -16,6 +16,13 @@ router.use(authenticateToken);
 router.post('/analyze', aiAnalysisController.analyzeCode);
 
 /**
+ * @route POST /api/ai/analyze-enhanced
+ * @desc Enhanced code analysis with categorization and prioritization
+ * @access Private
+ */
+router.post('/analyze-enhanced', aiAnalysisController.analyzeCodeEnhanced);
+
+/**
  * @route POST /api/ai/sessions/:sessionId/analyze
  * @desc Analyze code for a specific session
  * @access Private

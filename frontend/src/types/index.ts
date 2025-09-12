@@ -41,6 +41,7 @@ export interface Annotation {
   content: string;
   type: 'comment' | 'suggestion' | 'question';
   createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface AISuggestion {
@@ -113,4 +114,65 @@ export interface SessionState {
   currentAnnotations: Annotation[];
   aiSuggestions: AISuggestion[];
   debateMode: boolean;
+}
+
+// New AI Suggestion and Debate types
+export interface Suggestion {
+  id: string;
+  codeSnippetId: string;
+  sessionId: string;
+  userId: string;
+  type: 'improvement' | 'bug_fix' | 'optimization' | 'refactoring' | 'security' | 'style';
+  category: 'performance' | 'maintainability' | 'security' | 'style' | 'bugs';
+  severity: 'low' | 'medium' | 'high';
+  title: string;
+  description: string;
+  codeExample?: string;
+  explanation: string;
+  confidence: number;
+  lineNumber?: number;
+  columnRange?: { start: number; end: number };
+  tags: string[];
+  status: 'pending' | 'accepted' | 'rejected' | 'implemented' | 'dismissed';
+  userFeedback?: {
+    rating: number;
+    comment?: string;
+    timestamp: Date;
+  };
+  aiModel: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DebateArgument {
+  id: string;
+  content: string;
+  type: 'pro' | 'con' | 'neutral';
+  confidence: number;
+  evidence: string[];
+  source: 'ai' | 'user';
+  timestamp: Date;
+}
+
+export interface DebateSession {
+  id: string;
+  codeSnippetId: string;
+  sessionId: string;
+  topic: string;
+  context: {
+    codeContext: string;
+    userIntent: string;
+    previousSuggestions: string[];
+  };
+  arguments: DebateArgument[];
+  status: 'active' | 'concluded' | 'abandoned';
+  conclusion?: {
+    summary: string;
+    recommendation: string;
+    confidence: number;
+    timestamp: Date;
+  };
+  participants: string[];
+  createdAt: Date;
+  updatedAt: Date;
 }

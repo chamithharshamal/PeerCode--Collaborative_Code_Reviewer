@@ -4,7 +4,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { Annotation } from '@/types';
 import { useAnnotations } from '@/hooks/useAnnotations';
 import { AnnotationModal } from './AnnotationModal';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/lib/auth-context';
 
 interface AnnotationManagerProps {
   sessionId: string;

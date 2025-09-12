@@ -42,6 +42,15 @@ export interface ClientToServerEvents {
   'typing-indicator': (data: { sessionId: string; isTyping: boolean }) => void;
   'heartbeat': () => void;
   'request-session-state': (data: { sessionId: string }) => void;
+  'request-annotations': (data: { sessionId: string; lineRange?: { start: number; end: number } }) => void;
+  'search-annotations': (data: { 
+    sessionId: string; 
+    query: string; 
+    type?: 'comment' | 'suggestion' | 'question';
+    userId?: string;
+  }) => void;
+  'annotation-focus': (data: { sessionId: string; annotationId: string; focused: boolean }) => void;
+  'annotation-resolve': (data: { sessionId: string; annotationId: string; resolved: boolean }) => void;
   'request-ai-analysis': (data: { sessionId: string; codeSnippet: CodeSnippet }) => void;
   'activate-debate-mode': (data: { sessionId: string; codeChange: CodeChange }) => void;
   'debate-response': (data: { sessionId: string; response: string }) => void;
@@ -56,6 +65,10 @@ export interface ServerToClientEvents {
   'annotation-added': (data: { annotation: Annotation; userId: string }) => void;
   'annotation-updated': (data: { annotation: Annotation; userId: string }) => void;
   'annotation-deleted': (data: { annotationId: string; userId: string }) => void;
+  'annotations-loaded': (data: { annotations: Annotation[]; sessionId: string }) => void;
+  'annotations-search-results': (data: { annotations: Annotation[]; query: string; sessionId: string }) => void;
+  'annotation-focus-changed': (data: { annotationId: string; userId: string; focused: boolean }) => void;
+  'annotation-resolved': (data: { annotation: Annotation; userId: string; resolved: boolean }) => void;
   'code-highlighted': (data: { range: CodeRange; userId: string }) => void;
   'typing-indicator': (data: { userId: string; isTyping: boolean }) => void;
   'heartbeat-ping': () => void;

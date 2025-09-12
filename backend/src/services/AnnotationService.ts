@@ -24,6 +24,33 @@ export interface UpdateAnnotationRequest {
   columnEnd?: number;
 }
 
+export interface SearchAnnotationsParams {
+  query?: string;
+  sessionId?: string;
+  type?: 'comment' | 'suggestion' | 'question';
+  userId?: string;
+}
+
+export interface AnnotationStats {
+  total: number;
+  byType: {
+    comment: number;
+    suggestion: number;
+    question: number;
+  };
+  byUser: Array<{
+    userId: string;
+    count: number;
+  }>;
+  recentActivity: Array<{
+    id: string;
+    content: string;
+    type: 'comment' | 'suggestion' | 'question';
+    createdAt: Date;
+    userId: string;
+  }>;
+}
+
 export class AnnotationService {
   private repository: AnnotationRepository;
   private redis: Redis;
@@ -192,6 +219,14 @@ export class AnnotationService {
     return deletedCount;
   }
 
+  async searchAnnotations(params: SearchAnnotationsParams): Promise<AnnotationData[]> {
+    return await this.repository.search(params);
+  }
+
+  async getAnnotationStats(sessionId?: string, userId?: string): Promise<AnnotationStats> {
+    return await this.repository.getStats(sessionId, userId);
+  }
+
   private async invalidateSessionCache(sessionId: string): Promise<void> {
     try {
       const cacheKey = `${this.CACHE_PREFIX}${sessionId}`;
@@ -199,7 +234,5 @@ export class AnnotationService {
     } catch (error) {
       console.warn('Cache invalidation error (Redis unavailable):', (error as Error).message);
     }
-    
-    }
-    
   }
+}

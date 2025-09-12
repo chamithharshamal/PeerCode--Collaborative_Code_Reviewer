@@ -17,6 +17,8 @@ import codeSnippetRoutes from './routes/codeSnippet';
 import sessionRoutes from './routes/session';
 import annotationRoutes from './routes/annotation';
 import aiAnalysisRoutes from './routes/aiAnalysis';
+import suggestionRoutes from './routes/suggestion';
+import debateRoutes from './routes/debate';
 import { initializeDatabase, closeConnections } from './config/database';
 import { SessionCleanupService } from './services/SessionCleanupService';
 import { WebSocketService } from './services/WebSocketService';
@@ -33,7 +35,11 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEve
   server,
   {
     cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+      origin: [
+        process.env.FRONTEND_URL || 'http://localhost:3000',
+        'http://192.168.197.26:3000',
+        'http://localhost:3000'
+      ],
       methods: ['GET', 'POST'],
     },
   }
@@ -45,7 +51,11 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: [
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+      'http://192.168.197.26:3000',
+      'http://localhost:3000'
+    ],
     credentials: true,
   })
 );
@@ -59,6 +69,8 @@ app.use('/api/code-snippets', codeSnippetRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api', annotationRoutes);
 app.use('/api/ai', aiAnalysisRoutes);
+app.use('/api/suggestions', suggestionRoutes);
+app.use('/api/debates', debateRoutes);
 
 // Basic health check route
 app.get('/health', (req, res) => {
@@ -86,6 +98,7 @@ const startServer = async () => {
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`Accessible at: http://localhost:${PORT} or http://192.168.197.26:${PORT}`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

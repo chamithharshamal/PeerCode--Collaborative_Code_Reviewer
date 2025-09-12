@@ -22,4 +22,8 @@ router.delete('/sessions/:sessionId/annotations', annotationController.clearSess
 // User-specific annotation operations
 router.get('/users/:userId/annotations', annotationController.getUserAnnotations);
 
+// Search and statistics
+router.get('/annotations/search', annotationController.searchAnnotations);
+router.get('/annotations/stats', annotationController.getAnnotationStats);
+
 export default router;

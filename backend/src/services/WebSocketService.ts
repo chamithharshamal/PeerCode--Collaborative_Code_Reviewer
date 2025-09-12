@@ -57,6 +57,22 @@ export class WebSocketService {
         await this.handleDeleteAnnotation(socket, data);
       });
 
+      socket.on('request-annotations', async (data) => {
+        await this.handleRequestAnnotations(socket, data);
+      });
+
+      socket.on('search-annotations', async (data) => {
+        await this.handleSearchAnnotations(socket, data);
+      });
+
+      socket.on('annotation-focus', (data) => {
+        this.handleAnnotationFocus(socket, data);
+      });
+
+      socket.on('annotation-resolve', async (data) => {
+        await this.handleAnnotationResolve(socket, data);
+      });
+
       socket.on('highlight-code', (data) => {
         this.handleHighlightCode(socket, data);
       });
@@ -511,6 +527,169 @@ export class WebSocketService {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
+    }
+  }
+
+  private async handleRequestAnnotations(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
+    data: { sessionId: string; lineRange?: { start: number; end: number } }
+  ): Promise<void> {
+    try {
+      const { sessionId, lineRange } = data;
+      const userId = socket.data.userId;
+
+      if (!userId || socket.data.sessionId !== sessionId) {
+        socket.emit('error', {
+          message: 'Unauthorized to request annotations',
+          code: 'UNAUTHORIZED',
+        });
+        return;
+      }
+
+      let annotations;
+      if (lineRange) {
+        annotations = await this.annotationService.getAnnotationsByLineRange(
+          sessionId,
+          lineRange.start,
+          lineRange.end
+        );
+      } else {
+        annotations = await this.annotationService.getSessionAnnotations(sessionId);
+      }
+
+      socket.emit('annotations-loaded', {
+        annotations,
+        sessionId,
+      });
+
+      console.log(`Annotations requested for session ${sessionId} by user ${userId}`);
+    } catch (error) {
+      console.error('Error handling request annotations:', error);
+      socket.emit('error', {
+        message: 'Failed to load annotations',
+        code: 'LOAD_ANNOTATIONS_ERROR',
+      });
+    }
+  }
+
+  private async handleSearchAnnotations(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
+    data: { 
+      sessionId: string; 
+      query: string; 
+      type?: 'comment' | 'suggestion' | 'question';
+      userId?: string;
+    }
+  ): Promise<void> {
+    try {
+      const { sessionId, query, type, userId: searchUserId } = data;
+      const requestingUserId = socket.data.userId;
+
+      if (!requestingUserId || socket.data.sessionId !== sessionId) {
+        socket.emit('error', {
+          message: 'Unauthorized to search annotations',
+          code: 'UNAUTHORIZED',
+        });
+        return;
+      }
+
+      // Users can only search their own annotations unless they're searching all
+      const searchParams = {
+        query,
+        sessionId,
+        type,
+        userId: searchUserId || requestingUserId
+      };
+
+      const annotations = await this.annotationService.searchAnnotations(searchParams);
+
+      socket.emit('annotations-search-results', {
+        annotations,
+        query,
+        sessionId,
+      });
+
+      console.log(`Annotations searched in session ${sessionId} by user ${requestingUserId}`);
+    } catch (error) {
+      console.error('Error handling search annotations:', error);
+      socket.emit('error', {
+        message: 'Failed to search annotations',
+        code: 'SEARCH_ANNOTATIONS_ERROR',
+      });
+    }
+  }
+
+  private handleAnnotationFocus(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
+    data: { sessionId: string; annotationId: string; focused: boolean }
+  ): void {
+    const { sessionId, annotationId, focused } = data;
+    const userId = socket.data.userId;
+
+    if (!userId || socket.data.sessionId !== sessionId) {
+      socket.emit('error', {
+        message: 'Unauthorized to focus annotation',
+        code: 'UNAUTHORIZED',
+      });
+      return;
+    }
+
+    // Broadcast to other participants (not the sender)
+    socket.to(sessionId).emit('annotation-focus-changed', {
+      annotationId,
+      userId,
+      focused,
+    });
+
+    console.log(`Annotation ${annotationId} focus changed in session ${sessionId} by user ${userId}`);
+  }
+
+  private async handleAnnotationResolve(
+    socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>,
+    data: { sessionId: string; annotationId: string; resolved: boolean }
+  ): Promise<void> {
+    try {
+      const { sessionId, annotationId, resolved } = data;
+      const userId = socket.data.userId;
+
+      if (!userId || socket.data.sessionId !== sessionId) {
+        socket.emit('error', {
+          message: 'Unauthorized to resolve annotation',
+          code: 'UNAUTHORIZED',
+        });
+        return;
+      }
+
+      // Check if user owns the annotation
+      const existingAnnotation = await this.annotationService.getAnnotation(annotationId);
+      if (!existingAnnotation || existingAnnotation.userId !== userId) {
+        socket.emit('error', {
+          message: 'Annotation not found or access denied',
+          code: 'ANNOTATION_ACCESS_DENIED',
+        });
+        return;
+      }
+
+      // Update annotation with resolved status
+      const updatedAnnotation = await this.annotationService.updateAnnotation(annotationId, {
+        // Add resolved field to content or use a separate field
+        content: existingAnnotation.content + (resolved ? ' [RESOLVED]' : ''),
+      });
+
+      // Broadcast to all participants in the session
+      this.io.to(sessionId).emit('annotation-resolved', {
+        annotation: updatedAnnotation,
+        userId,
+        resolved,
+      });
+
+      console.log(`Annotation ${annotationId} ${resolved ? 'resolved' : 'unresolved'} in session ${sessionId} by user ${userId}`);
+    } catch (error) {
+      console.error('Error handling annotation resolve:', error);
+      socket.emit('error', {
+        message: 'Failed to resolve annotation',
+        code: 'RESOLVE_ANNOTATION_ERROR',
+      });
     }
   }
 

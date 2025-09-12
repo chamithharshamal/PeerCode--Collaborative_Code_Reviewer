@@ -339,6 +339,94 @@ export class AIAnalysisController {
   };
 
   /**
+   * Enhanced code analysis with categorization and prioritization
+   */
+  analyzeCodeEnhanced = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { codeSnippetId, config } = req.body;
+      const userId = req.user?.userId;
+
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          error: {
+            message: 'Authentication required',
+            code: 'UNAUTHORIZED'
+          }
+        } as ApiResponse);
+        return;
+      }
+
+      if (!codeSnippetId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            message: 'Code snippet ID is required',
+            code: 'MISSING_CODE_SNIPPET_ID'
+          }
+        } as ApiResponse);
+        return;
+      }
+
+      // Get the code snippet
+      const codeSnippet = await this.codeSnippetService.getCodeSnippet(codeSnippetId);
+      if (!codeSnippet) {
+        res.status(404).json({
+          success: false,
+          error: {
+            message: 'Code snippet not found',
+            code: 'CODE_SNIPPET_NOT_FOUND'
+          }
+        } as ApiResponse);
+        return;
+      }
+
+      // Create enhanced AI analysis service with custom config
+      const enhancedService = new AIAnalysisService(config);
+      
+      // Perform enhanced analysis
+      const analysis = await enhancedService.analyzeCodeEnhanced(codeSnippet);
+      
+      // Generate prioritized suggestions
+      const suggestions = await enhancedService.generateSuggestions(analysis);
+
+      const response = {
+        analysis,
+        suggestions,
+        metadata: {
+          processingTime: analysis.processingTime,
+          confidence: analysis.confidence,
+          categories: Object.keys(analysis.categories).map(categoryId => {
+            const category = enhancedService['suggestionCategories'].find(c => c.id === categoryId);
+            return {
+              id: categoryId,
+              name: category?.name || categoryId,
+              count: analysis.categories[categoryId as keyof typeof analysis.categories].length,
+              priority: category?.priority || 'medium'
+            };
+          })
+        }
+      };
+
+      res.json({
+        success: true,
+        data: response
+      } as ApiResponse);
+
+    } catch (error) {
+      console.error('Error in enhanced code analysis:', error);
+      res.status(500).json({
+        success: false,
+        error: {
+          message: 'Failed to perform enhanced code analysis',
+          code: 'ENHANCED_ANALYSIS_FAILED',
+          details: error instanceof Error ? error.message : 'Unknown error'
+        }
+      } as ApiResponse);
+    }
+  };
+
+  /**
    * Get AI analysis health status
    */
   getHealthStatus = async (req: Request, res: Response): Promise<void> => {

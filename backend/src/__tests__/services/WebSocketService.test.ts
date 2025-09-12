@@ -4,7 +4,8 @@ import Client from 'socket.io-client';
 import { WebSocketService } from '../../services/WebSocketService';
 import { SessionService } from '../../services/SessionService';
 import { UserService } from '../../services/UserService';
-import { User, Annotation, CodeSnippet, SessionState } from '../../types';
+import { User, CodeSnippet, SessionState } from '../../types';
+import { Annotation } from '../../models/Annotation';
 
 describe('WebSocketService', () => {
   let httpServer: any;
@@ -162,18 +163,17 @@ describe('WebSocketService', () => {
     });
 
     it('should handle add-annotation event successfully', (done) => {
-      const mockAnnotation: Annotation = {
-        id: 'annotation-1',
-        userId: 'user-1',
-        sessionId: 'session-1',
-        lineStart: 1,
-        lineEnd: 1,
-        columnStart: 0,
-        columnEnd: 10,
-        content: 'Test annotation',
-        type: 'comment',
-        createdAt: new Date(),
-      };
+      const mockAnnotation = new Annotation(
+        'user-1',
+        'session-1',
+        1,
+        1,
+        0,
+        10,
+        'Test annotation',
+        'comment'
+      );
+      mockAnnotation.id = 'annotation-1';
 
       mockSessionService.addAnnotation.mockResolvedValue(mockAnnotation);
 

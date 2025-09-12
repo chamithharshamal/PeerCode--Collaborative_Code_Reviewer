@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { Annotation, AnnotationData } from '../models/Annotation';
+import { SearchAnnotationsParams, AnnotationStats } from '../services/AnnotationService';
 
 export class AnnotationRepository {
   constructor(private pool: Pool) {}
@@ -162,6 +163,131 @@ export class AnnotationRepository {
       const result = await client.query(query, [sessionId, lineStart, lineEnd]);
       
       return result.rows.map(row => this.mapRowToAnnotationData(row));
+    } finally {
+      client.release();
+    }
+  }
+
+  async search(params: SearchAnnotationsParams): Promise<AnnotationData[]> {
+    const client = await this.pool.connect();
+    try {
+      let query = 'SELECT * FROM annotations WHERE 1=1';
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (params.query) {
+        query += ` AND content ILIKE $${paramIndex}`;
+        values.push(`%${params.query}%`);
+        paramIndex++;
+      }
+
+      if (params.sessionId) {
+        query += ` AND session_id = $${paramIndex}`;
+        values.push(params.sessionId);
+        paramIndex++;
+      }
+
+      if (params.type) {
+        query += ` AND type = $${paramIndex}`;
+        values.push(params.type);
+        paramIndex++;
+      }
+
+      if (params.userId) {
+        query += ` AND user_id = $${paramIndex}`;
+        values.push(params.userId);
+        paramIndex++;
+      }
+
+      query += ' ORDER BY created_at DESC';
+
+      const result = await client.query(query, values);
+      return result.rows.map(row => this.mapRowToAnnotationData(row));
+    } finally {
+      client.release();
+    }
+  }
+
+  async getStats(sessionId?: string, userId?: string): Promise<AnnotationStats> {
+    const client = await this.pool.connect();
+    try {
+      let whereClause = 'WHERE 1=1';
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (sessionId) {
+        whereClause += ` AND session_id = $${paramIndex}`;
+        values.push(sessionId);
+        paramIndex++;
+      }
+
+      if (userId) {
+        whereClause += ` AND user_id = $${paramIndex}`;
+        values.push(userId);
+        paramIndex++;
+      }
+
+      // Get total count
+      const totalQuery = `SELECT COUNT(*) as total FROM annotations ${whereClause}`;
+      const totalResult = await client.query(totalQuery, values);
+      const total = parseInt(totalResult.rows[0].total);
+
+      // Get count by type
+      const typeQuery = `
+        SELECT type, COUNT(*) as count 
+        FROM annotations ${whereClause}
+        GROUP BY type
+      `;
+      const typeResult = await client.query(typeQuery, values);
+      
+      const byType = {
+        comment: 0,
+        suggestion: 0,
+        question: 0
+      };
+      
+      typeResult.rows.forEach(row => {
+        byType[row.type as keyof typeof byType] = parseInt(row.count);
+      });
+
+      // Get count by user
+      const userQuery = `
+        SELECT user_id, COUNT(*) as count 
+        FROM annotations ${whereClause}
+        GROUP BY user_id
+        ORDER BY count DESC
+        LIMIT 10
+      `;
+      const userResult = await client.query(userQuery, values);
+      
+      const byUser = userResult.rows.map(row => ({
+        userId: row.user_id,
+        count: parseInt(row.count)
+      }));
+
+      // Get recent activity
+      const recentQuery = `
+        SELECT id, content, type, created_at, user_id
+        FROM annotations ${whereClause}
+        ORDER BY created_at DESC
+        LIMIT 10
+      `;
+      const recentResult = await client.query(recentQuery, values);
+      
+      const recentActivity = recentResult.rows.map(row => ({
+        id: row.id,
+        content: row.content,
+        type: row.type,
+        createdAt: row.created_at,
+        userId: row.user_id
+      }));
+
+      return {
+        total,
+        byType,
+        byUser,
+        recentActivity
+      };
     } finally {
       client.release();
     }
